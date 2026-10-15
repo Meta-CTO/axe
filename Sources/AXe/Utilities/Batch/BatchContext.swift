@@ -21,8 +21,10 @@ final class BatchContext {
     let tapStyle: TapStyle
     let waitTimeout: TimeInterval
     let pollInterval: TimeInterval
+    let cachesCoordinateMapping: Bool
 
     private var cachedRoots: [AccessibilityElement]?
+    private var cachedMapping: CoordinateMapping?
 
     init(
         simulatorUDID: String,
@@ -31,7 +33,8 @@ final class BatchContext {
         typeChunkSize: Int,
         tapStyle: TapStyle = .automatic,
         waitTimeout: TimeInterval = 0,
-        pollInterval: TimeInterval = 0.25
+        pollInterval: TimeInterval = 0.25,
+        cachesCoordinateMapping: Bool? = nil
     ) {
         self.simulatorUDID = simulatorUDID
         self.axCachePolicy = axCachePolicy
@@ -40,6 +43,7 @@ final class BatchContext {
         self.tapStyle = tapStyle
         self.waitTimeout = waitTimeout
         self.pollInterval = pollInterval
+        self.cachesCoordinateMapping = cachesCoordinateMapping ?? (axCachePolicy == .perBatch)
     }
 
     func accessibilityRoots(logger: AxeLogger, forceRefresh: Bool = false) async throws -> [AccessibilityElement] {
@@ -57,5 +61,26 @@ final class BatchContext {
             return roots
         }
     }
-}
 
+    /// The coordinate mapping is a property of the simulator's orientation, not of the screen
+    /// contents, so a perBatch cache reuses it across steps instead of re-probing per step.
+    func coordinateMapping(logger: AxeLogger) async throws -> CoordinateMapping {
+        if cachesCoordinateMapping, let cachedMapping {
+            return cachedMapping
+        }
+        let roots = try await accessibilityRoots(logger: logger)
+        let mapping = try await OrientationAwareCoordinates.detectMapping(
+            from: roots,
+            simulatorUDID: simulatorUDID,
+            logger: logger
+        )
+        if cachesCoordinateMapping {
+            cachedMapping = mapping
+        }
+        return mapping
+    }
+
+    func translate(_ point: (x: Double, y: Double), logger: AxeLogger) async throws -> (x: Double, y: Double) {
+        OrientationAwareCoordinates.applyMapping(try await coordinateMapping(logger: logger), to: point, logger: logger)
+    }
+}

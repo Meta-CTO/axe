@@ -30,6 +30,9 @@ struct Batch: AsyncParsableCommand {
     @Option(name: .customLong("file"), help: "Read steps from a file (one step per line).")
     var file: String?
 
+    @Flag(name: .customLong("serve"), help: "Keep one session open and run each stdin line as it arrives, replying 'ok' or 'err <message>' per line on stdout.")
+    var serve: Bool = false
+
     @Flag(name: .customLong("stdin"), help: "Read steps from stdin (one step per line).")
     var useStdin: Bool = false
 
@@ -58,9 +61,9 @@ struct Batch: AsyncParsableCommand {
     var verbose: Bool = false
 
     func validate() throws {
-        let sourceCount = [!steps.isEmpty, file != nil, useStdin].filter { $0 }.count
+        let sourceCount = [!steps.isEmpty, file != nil, useStdin, serve].filter { $0 }.count
         guard sourceCount == 1 else {
-            throw ValidationError("Specify exactly one step source: --step, --file, or --stdin.")
+            throw ValidationError("Specify exactly one step source: --step, --file, --stdin, or --serve.")
         }
 
         guard typeChunkSize > 0 else {
@@ -82,6 +85,11 @@ struct Batch: AsyncParsableCommand {
         let logger = AxeLogger(writeToStdErr: verbose)
         try await setup(logger: logger)
         try await performGlobalSetup(logger: logger)
+
+        if serve {
+            try await runServe(logger: logger)
+            return
+        }
 
         let stepLines = try loadStepLines()
         if stepLines.isEmpty {
@@ -132,6 +140,47 @@ struct Batch: AsyncParsableCommand {
         }
 
         print("✓ Batch completed successfully (\(stepLines.count) steps)")
+    }
+
+    /// Screen contents change between lines, so the accessibility tree is fetched per step;
+    /// only the coordinate mapping is reused for the life of the session.
+    private func runServe(logger: AxeLogger) async throws {
+        let context = await MainActor.run {
+            BatchContext(
+                simulatorUDID: simulatorUDID,
+                axCachePolicy: .perStep,
+                typeSubmissionMode: typeSubmissionMode,
+                typeChunkSize: typeChunkSize,
+                tapStyle: tapStyle,
+                waitTimeout: waitTimeout,
+                pollInterval: pollInterval,
+                cachesCoordinateMapping: true
+            )
+        }
+        let session = try await HIDInteractor.makeSession(for: simulatorUDID, logger: logger)
+        let runner = BatchPlanRunner(session: session, logger: logger)
+        _ = try await context.coordinateMapping(logger: logger)
+
+        print("ready")
+        fflush(stdout)
+        while let rawLine = readLine() {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            if line.isEmpty || line.hasPrefix("#") { continue }
+            do {
+                let tokens = try ShellTokenizer.tokenize(line)
+                let primitives = try await BatchStepParser.parseStepTokens(
+                    tokens,
+                    globalUDID: simulatorUDID,
+                    context: context,
+                    logger: logger
+                )
+                try await runner.run(BatchPlan(primitives: primitives))
+                print("ok")
+            } catch {
+                print("err \(error.localizedDescription.replacingOccurrences(of: "\n", with: " "))")
+            }
+            fflush(stdout)
+        }
     }
 
     private func loadStepLines() throws -> [String] {

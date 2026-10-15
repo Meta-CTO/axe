@@ -77,11 +77,9 @@ extension Tap: BatchConvertible {
 
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
         let resolution: TapResolution
-        let resolvedRoots: [AccessibilityElement]?
 
         if let pointX, let pointY {
             resolution = TapResolution(point: (x: pointX, y: pointY), isSwitchLikeControl: false)
-            resolvedRoots = nil
         } else {
             let query: AccessibilityQuery
             if let elementID {
@@ -101,24 +99,9 @@ extension Tap: BatchConvertible {
                 logger: logger
             )
             resolution = resolved.resolution
-            resolvedRoots = resolved.roots
         }
 
-        let physicalPoint: (x: Double, y: Double)
-        if let resolvedRoots {
-            physicalPoint = try await OrientationAwareCoordinates.translate(
-                point: resolution.point,
-                roots: resolvedRoots,
-                for: context.simulatorUDID,
-                logger: logger
-            )
-        } else {
-            physicalPoint = try await OrientationAwareCoordinates.translate(
-                point: resolution.point,
-                for: context.simulatorUDID,
-                logger: logger
-            )
-        }
+        let physicalPoint = try await context.translate(resolution.point, logger: logger)
 
         let style = resolvedTapStyle(for: resolution, context: context)
         switch style {
@@ -137,13 +120,8 @@ extension Swipe: BatchConvertible {
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
         let swipeDuration = duration ?? 1.0
         let swipeDelta = delta ?? 50.0
-        let physicalPoints = try await OrientationAwareCoordinates.translateBatch(
-            points: [(x: startX, y: startY), (x: endX, y: endY)],
-            for: context.simulatorUDID,
-            logger: logger
-        )
-        let physicalStart = physicalPoints[0]
-        let physicalEnd = physicalPoints[1]
+        let physicalStart = try await context.translate((x: startX, y: startY), logger: logger)
+        let physicalEnd = try await context.translate((x: endX, y: endY), logger: logger)
 
         let swipeEvent = FBSimulatorHIDEvent.swipe(
             physicalStart.x,
@@ -154,6 +132,22 @@ extension Swipe: BatchConvertible {
             duration: swipeDuration
         )
         return [.hidMergeable(buildDelayedEvent(preDelay: preDelay, mainEvent: swipeEvent, postDelay: postDelay))]
+    }
+}
+
+extension Drag: BatchConvertible {
+    func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
+        let physicalStart = try await context.translate((x: startX, y: startY), logger: logger)
+        let physicalEnd = try await context.translate((x: endX, y: endY), logger: logger)
+        let dragEvent = try HIDInteractor.makeCompositeDragEvent(
+            from: physicalStart,
+            to: physicalEnd,
+            duration: duration,
+            steps: steps,
+            initialHold: 0.05,
+            finalHold: 0.05
+        )
+        return [.hidBarrier(dragEvent)]
     }
 }
 
@@ -180,11 +174,7 @@ extension Gesture: BatchConvertible {
 
 extension Touch: BatchConvertible {
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
-        let physicalPoint = try await OrientationAwareCoordinates.translate(
-            point: (x: pointX, y: pointY),
-            for: context.simulatorUDID,
-            logger: logger
-        )
+        let physicalPoint = try await context.translate((x: pointX, y: pointY), logger: logger)
 
         let touchDownEvent = FBSimulatorHIDEvent.touch(direction: .down, x: physicalPoint.x, y: physicalPoint.y)
         let touchUpEvent = FBSimulatorHIDEvent.touch(direction: .up, x: physicalPoint.x, y: physicalPoint.y)
