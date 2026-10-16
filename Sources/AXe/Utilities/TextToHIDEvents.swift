@@ -21,23 +21,31 @@ struct TextToHIDEvents {
         }
     }
     
+    private static let keyHold: TimeInterval = 0.02
+
     // MARK: - Simple Key Event Creation
     
     /// Creates key events for a character that doesn't require shift
     private static func simpleKeyEvent(keyCode: Int) -> [FBSimulatorHIDEvent] {
         return [
             .keyboard(direction: .down, keyCode: UInt32(keyCode)),
-            .keyboard(direction: .up, keyCode: UInt32(keyCode))
+            .delay(keyHold),
+            .keyboard(direction: .up, keyCode: UInt32(keyCode)),
+            .delay(keyHold)
         ]
     }
-    
+
     /// Creates key events for a character that requires shift
     private static func shiftedKeyEvent(keyCode: Int) -> [FBSimulatorHIDEvent] {
         return [
             .keyboard(direction: .down, keyCode: 225),
+            .delay(keyHold),
             .keyboard(direction: .down, keyCode: UInt32(keyCode)),
+            .delay(keyHold),
             .keyboard(direction: .up, keyCode: UInt32(keyCode)),
-            .keyboard(direction: .up, keyCode: 225)
+            .delay(keyHold),
+            .keyboard(direction: .up, keyCode: 225),
+            .delay(keyHold)
         ]
     }
     

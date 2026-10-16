@@ -12,6 +12,7 @@ A fork of [cameroncooke/AXe](https://github.com/cameroncooke/AXe) used by the an
 - `axe batch --serve`: one long-running session that reads one step per line on stdin and answers `ok` or `err <message>` per line. This saves the startup cost of a new axe process for every tap.
 - A cached screen-coordinate mapping, so taps don't redo the orientation lookup each time.
 - `drag` as a batch step, with a short hold at the start and end of the drag.
+- Typed keys are held for 20ms on press and release. Without it, iOS drops a key now and then when typing a word into a text field (about 1 test run in 20 for andrew-rn's createEvent test; 0 in 20 with the hold).
 
 ## Making a new release
 
