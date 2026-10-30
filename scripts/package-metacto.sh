@@ -9,6 +9,8 @@ mkdir -p dist
 rm -rf "$OUT" "$LOG"
 
 command -v xcodegen > /dev/null || { echo "needs xcodegen: brew install xcodegen"; exit 1; }
+XCODE_MAJOR="$(xcodebuild -version | sed -n 's/^Xcode \([0-9]*\).*/\1/p')"
+[ "$XCODE_MAJOR" -ge 27 ] || { echo "needs Xcode 27 or later selected, found Xcode $XCODE_MAJOR: see METACTO.md"; exit 1; }
 
 for stage in setup clean frameworks install strip xcframeworks; do
   echo "- idb frameworks: $stage"

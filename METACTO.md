@@ -18,6 +18,6 @@ A fork of [cameroncooke/AXe](https://github.com/cameroncooke/AXe) used by the an
 ## Making a new release
 
 1. Bring `metacto` up to date if needed: sync `main`, then `git rebase <upstream release tag>` on `metacto` and fix any conflicts.
-2. On an Apple Silicon Mac with Xcode and xcodegen: `scripts/package-metacto.sh <version>`, for example `1.8.0-metacto.2`. Run it from a clone outside `/tmp`: XcodeGen writes broken xcconfig paths through the `/tmp` to `/private/tmp` link.
+2. On an Apple Silicon Mac with Xcode 27 or later selected and xcodegen: `scripts/package-metacto.sh <version>`, for example `1.8.0-metacto.2`. The script refuses an older Xcode: an axe built with Xcode 26.4 connects to an iOS 27 simulator and its taps show on screen, but the app never acts on them. Run it from a clone outside `/tmp`: XcodeGen writes broken xcconfig paths through the `/tmp` to `/private/tmp` link.
 3. Run the `gh release create` command it prints.
 4. In andrew-rn, set `AXE_RELEASE` in `e2e/environment.mjs` to the new version.
